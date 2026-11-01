@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lpy IDE</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #1e1e1e; 
+            color: #d4d4d4; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        h1, h3 { color: #ffffff; margin-bottom: 10px; }
+        .ide-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px; 
+            margin-bottom: 20px; 
+        }
+        .panel { display: flex; flex-direction: column; }
+        textarea { 
+            height: 250px; 
+            background: #252526; 
+            color: #d4d4d4; 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 14px; 
+            padding: 15px; 
+            border: 1px solid #3c3c3c; 
+            border-radius: 4px; 
+            resize: vertical; 
+            outline: none; 
+        }
+        textarea:focus { border-color: #007acc; }
+        
+        /* Styled Python Target box with fallback color mapping */
+        .python-window { 
+            margin: 0; 
+            height: 250px; 
+            border-radius: 4px; 
+            border: 1px solid #3c3c3c; 
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            white-space: pre;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+        .console-output { 
+            background: #111111; 
+            color: #4af626; 
+            padding: 15px; 
+            font-family: 'Courier New', Courier, monospace; 
+            min-height: 80px; 
+            border-radius: 4px; 
+            white-space: pre-wrap; 
+            border: 1px solid #3c3c3c; 
+        }
+        .error-panel { 
+            color: #f48771; 
+            font-family: monospace; 
+            margin-top: 10px; 
+            white-space: pre-wrap; 
+        }
+        button { 
+            background: #0e639c; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+            align-self: start; 
+        }
+        button:hover { background: #1177bb; }
+    </style>
+</head>
+<body>
+
+    <h1>Lpy IDE</h1>
+    
+    <div class="ide-grid">
+        <div class="panel">
+            <h3>Run Lpy</h3>
+            <textarea id="editor" placeholder="Write your Lpy code syntax here..."></textarea>
+        </div>
+        
+        <div class="panel">
+            <h3>Compiled Python Target</h3>
+            <!-- Changed to a standard pre block to guarantee plain string rendering -->
+            <pre id="python-code" class="python-window"></pre>
+        </div>
+    </div>
+
+    <button id="run">Run & Compile</button>
+
+    <h3>Output</h3>
+    <div id="output" class="console-output"></div>
+    <div id="error" class="error-panel"></div>
+
+   <script>
+document.getElementById('run').onclick = async () => {
+    const editorEl = document.getElementById('editor');
+    const outputEl = document.getElementById('output');
+    const errorEl = document.getElementById('error');
+    const pythonEl = document.getElementById('python-code');
+
+    // 1. Reset all windows immediately so you see it working
+    outputEl.textContent = "Compiling and executing...";
+    errorEl.textContent = "";
+    pythonEl.textContent = "Processing payload...";
+
+    const sourceCodeValue = editorEl ? editorEl.value : "";
+    
+    try {
+        const res = await fetch("/compile", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ source: sourceCodeValue })
+        });
+        
+        if (!res.ok) {
+            throw new Error(`Server returned status code ${res.status}`);
+        }
+        
+        const serverResponsePayload = await res.json();
+        console.log("Response:", serverResponsePayload);
+        
+        // Clear status loaders
+        pythonEl.textContent = "";
+        outputEl.textContent = "";
+
+        // 2. Safely parse and unpack the Python code property
+        if (serverResponsePayload && typeof serverResponsePayload === 'object') {
+            
+            let pythonString = " ";
+            
+            
+            
+            // If the python key contains a nested object/dictionary, unpack or stringify it safely
+            if (pythonString && typeof pythonString === 'object') {
+                pythonString = pythonString.code || pythonString.source || JSON.stringify(pythonString, null, 4);
+            }
+            
+            // FIX: Dig one level deeper to extract the actual string out of the nested object structure
+		if (serverResponsePayload.python && typeof serverResponsePayload.python === 'object') {
+			// If it's the double-nested object, pull out the inner string key
+			pythonString = serverResponsePayload.python.python || JSON.stringify(serverResponsePayload.python, null, 4);
+		} else {
+			pythonString = serverResponsePayload.python || "";
+		}
+            
+            // inject strictly as clean text content
+            pythonEl.textContent = pythonString;
+            
+            // Populate terminal console output window
+            outputEl.textContent = serverResponsePayload.output || "# No output generated from execution.";
+            
+            // Extract and append any compilation error arrays safely
+            const errorsArray = serverResponsePayload.errors || serverResponsePayload.error || [];
+            if (Array.isArray(errorsArray) && errorsArray.length > 0) {
+                errorEl.textContent = errorsArray.join("\n");
+            }
+        } 
+        
+    } catch (err) {
+        console.error("UI Execution Crash:", err);
+        pythonEl.textContent = "# Execution Failed.";
+        outputEl.textContent = "";
+        errorEl.textContent = "Network/Server Error: " + err.message;
+    }
+};
+</script>
+</body>
+</html>

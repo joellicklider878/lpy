@@ -1,0 +1,6 @@
+users = get_users()
+those = [user for user in users if user.status == 'active']
+for user in those:    
+ send_email(user)
+ output':'email sent to Alice\nemail sent to Carol\n'
+ error': []
